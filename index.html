@@ -234,7 +234,7 @@ const GOLFER_NAMES = {
   "Lowry": ["Shane Lowry"],
   "C. Smith": ["Cameron Smith"],
   "Novak": ["S.H. Kim", "Andrew Novak", "Novak"],
-  "Campbell": ["Patrick Cantlay", "Patrick Campbell", "Campbell"],
+  "Campbell": ["Patrick Campbell", "Campbell"],
   "Henley": ["Russell Henley"],
   "Matsuyama": ["Hideki Matsuyama"],
   "Greyserman": ["Max Greyserman"],
@@ -526,14 +526,14 @@ function calculateLeaderboard() {
 // RENDERING
 // ============================================================
 function formatScore(score) {
-  if (score === null || score === undefined) return "-";
+  if (score === null || score === undefined || isNaN(score)) return "-";
   if (score === 0) return "E";
   if (score > 0) return `+${score}`;
   return `${score}`;
 }
 
 function scoreClass(score) {
-  if (score === null || score === undefined) return "";
+  if (score === null || score === undefined || isNaN(score)) return "";
   if (score < 0) return "under";
   if (score > 0) return "over";
   return "even";
