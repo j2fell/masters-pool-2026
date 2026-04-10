@@ -289,6 +289,32 @@ function findGolferScore(pickName) {
   return null;
 }
 
+// Parse a single score entry from ESPN — handles raw strokes, relative-to-par, and displayValue strings
+function parseESPNScore(entry, par) {
+  // Prefer displayValue as it's pre-formatted: "-5", "+2", "E", "67"
+  const display = String(entry.displayValue ?? entry.value ?? "").trim();
+  const val = entry.value;
+
+  // "E" means even par
+  if (display === "E" || display === "e") return 0;
+
+  // If displayValue looks like a relative score ("-5", "+2")
+  if (/^[+-]\d+$/.test(display)) return parseFloat(display);
+
+  // If displayValue is a raw stroke count string (no sign, number > 40)
+  const displayNum = parseFloat(display);
+  if (!isNaN(displayNum) && displayNum > 40) return displayNum - par;
+
+  // Fall through to raw value
+  if (val === null || val === undefined) return null;
+  const numVal = parseFloat(val);
+  if (isNaN(numVal)) return null;
+
+  // Distinguish raw strokes (>40) from relative score
+  if (numVal > 40) return numVal - par;
+  return numVal;
+}
+
 async function fetchESPN() {
   try {
     // Try scoreboard first, then leaderboard
@@ -314,6 +340,16 @@ async function fetchESPN() {
     const par = event.courses?.[0]?.par || AUGUSTA_PAR;
     let maxRounds = 0;
 
+    // Debug: log the first competitor's raw data so we can inspect ESPN's structure
+    if (competitors[0]) {
+      const s = competitors[0];
+      console.log("ESPN sample competitor:", s.athlete?.displayName);
+      console.log("  linescores:", JSON.stringify(s.linescores));
+      console.log("  score:", JSON.stringify(s.score));
+      console.log("  statistics:", JSON.stringify((s.statistics||[]).slice(0,5)));
+      console.log("  status:", JSON.stringify(s.status));
+    }
+
     for (const c of competitors) {
       const displayName = c.athlete?.displayName || "Unknown";
       const key = normalize(displayName);
@@ -321,37 +357,55 @@ async function fetchESPN() {
       const linescores = c.linescores || [];
       const rounds = {};
 
-      // ESPN can return linescores as either raw strokes (e.g. 67) or relative-to-par (e.g. -5)
-      // Raw strokes are always > 50 for golf; relative scores are -20 to +20
-      // Also skip if there are more than 4 entries — that means hole-by-hole, not round-by-round
-      if (linescores.length <= 4) {
-        for (let i = 0; i < linescores.length; i++) {
-          const ls = linescores[i];
-          const val = ls.value;
-          if (val === null || val === undefined) continue;
+      // Strategy 1: Use `period` field on each linescore (most reliable if present)
+      // ESPN sometimes explicitly tags each entry with a period/round number
+      const hasPeriod = linescores.some(ls => ls.period !== undefined && ls.period !== null);
 
-          let roundScore;
-          if (Math.abs(val) > 30) {
-            // Raw stroke count — convert to relative-to-par
-            roundScore = val - par;
-          } else {
-            // Already relative-to-par
-            roundScore = val;
+      if (hasPeriod) {
+        for (const ls of linescores) {
+          const period = ls.period;
+          if (!period || period < 1 || period > 4) continue;
+          const score = parseESPNScore(ls, par);
+          if (score !== null) {
+            rounds[`r${period}`] = score;
+            if (period > maxRounds) maxRounds = period;
           }
+        }
+      } else if (linescores.length >= 1 && linescores.length <= 4) {
+        // Strategy 2: No period field, but 1-4 entries = treat as round-by-round
+        for (let i = 0; i < linescores.length; i++) {
+          const score = parseESPNScore(linescores[i], par);
+          if (score !== null) {
+            rounds[`r${i + 1}`] = score;
+            if (i + 1 > maxRounds) maxRounds = i + 1;
+          }
+        }
+      }
+      // If linescores.length > 4 it's hole-by-hole — skip and rely on total only
 
-          rounds[`r${i+1}`] = roundScore;
-          if (i + 1 > maxRounds) maxRounds = i + 1;
+      // Strategy 3: Try statistics array for named round scores (R1, R2 etc.)
+      if (Object.keys(rounds).length === 0) {
+        for (const stat of (c.statistics || [])) {
+          const m = (stat.name || stat.abbreviation || "").match(/^[Rr](\d)$/);
+          if (m) {
+            const r = parseInt(m[1]);
+            const score = parseESPNScore(stat, par);
+            if (score !== null) {
+              rounds[`r${r}`] = score;
+              if (r > maxRounds) maxRounds = r;
+            }
+          }
         }
       }
 
-      // Parse total score — ESPN may give it as a string like "-5" or an object
+      // Parse total score
       let totalVal = null;
       if (c.score !== undefined) {
-        const raw = typeof c.score === 'object' ? c.score.value : c.score;
-        totalVal = parseFloat(raw);
-        if (isNaN(totalVal)) totalVal = null;
+        const raw = typeof c.score === 'object' ? (c.score.value ?? c.score.displayValue) : c.score;
+        const parsed = parseFloat(String(raw).replace('+',''));
+        if (!isNaN(parsed)) totalVal = parsed;
       }
-      // If we have round scores but no total, sum them
+      // Fall back: derive total from round scores we have
       if (totalVal === null && Object.keys(rounds).length > 0) {
         totalVal = Object.values(rounds).reduce((a, b) => a + b, 0);
       }
