@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2026 Masters Pool</title>
+<style>
+  :root {
+    --masters-green: #006747;
+    --masters-dark: #004d35;
+    --masters-gold: #c8a951;
+    --accent: #e87722;
+    --bg: #f5f5f0;
+    --card-bg: #ffffff;
+    --text: #1a1a1a;
+    --text-light: #666;
+    --border: #e0e0d8;
+    --red: #d32f2f;
+    --under-par: #d32f2f;
+    --over-par: #333;
+    --even-par: #666;
+    --highlight: #fff8e1;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height:100vh; }
+
+  header {
+    background: linear-gradient(135deg, var(--masters-green), var(--masters-dark));
+    color: white; padding: 16px 20px; text-align:center; position: sticky; top:0; z-index:100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  header h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
+  header .subtitle { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+  .header-row { display:flex; justify-content:space-between; align-items:center; max-width:800px; margin:0 auto; }
+  .refresh-info { font-size: 11px; opacity: 0.7; margin-top:6px; }
+  .refresh-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#4caf50; margin-right:4px; vertical-align:middle; }
+  .refresh-dot.offline { background: var(--accent); }
+
+  .controls { display:flex; gap:8px; justify-content:center; margin-top:10px; flex-wrap:wrap; }
+  .controls button {
+    background: rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3); color:white;
+    padding: 6px 14px; border-radius:20px; font-size:12px; cursor:pointer; transition:0.2s;
+  }
+  .controls button:hover { background: rgba(255,255,255,0.25); }
+  .controls button.active { background: var(--masters-gold); color: var(--masters-dark); border-color: var(--masters-gold); font-weight:600; }
+
+  .container { max-width: 800px; margin: 0 auto; padding: 12px; }
+
+  .leaderboard-header {
+    display: grid; grid-template-columns: 40px 1fr 60px 50px 50px 50px 50px;
+    padding: 10px 16px; font-size: 11px; font-weight: 600; color: var(--text-light);
+    text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--border);
+  }
+  .leaderboard-header span:nth-child(n+3) { text-align:center; }
+
+  .participant-card {
+    background: var(--card-bg); border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background 0.15s;
+  }
+  .participant-card:first-child { border-radius: 8px 8px 0 0; }
+  .participant-card:last-child { border-radius: 0 0 8px 8px; }
+  .participant-card:hover { background: #fafaf5; }
+  .participant-card.expanded { background: var(--highlight); }
+
+  .participant-row {
+    display: grid; grid-template-columns: 40px 1fr 60px 50px 50px 50px 50px;
+    padding: 14px 16px; align-items: center; font-size: 14px;
+  }
+  .pos { font-weight: 700; color: var(--text-light); font-size: 15px; }
+  .pos.top3 { color: var(--masters-green); }
+  .name-cell { font-weight: 600; }
+  .name-cell .daily-bests { font-size: 11px; color: var(--accent); font-weight: 700; display:block; margin-top:2px; }
+  .score-cell { text-align: center; font-weight: 600; font-size: 14px; }
+  .score-cell.under { color: var(--under-par); }
+  .score-cell.over { color: var(--over-par); }
+  .score-cell.even { color: var(--even-par); }
+  .total-cell { font-size: 16px; font-weight: 700; }
+
+  .golfer-details {
+    padding: 0 16px 14px 16px; display: none;
+  }
+  .participant-card.expanded .golfer-details { display: block; }
+
+  .golfer-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .golfer-table th {
+    text-align: left; font-size: 10px; text-transform: uppercase; color: var(--text-light);
+    padding: 6px 8px; border-bottom: 1px solid var(--border); font-weight: 600; letter-spacing: 0.3px;
+  }
+  .golfer-table th:nth-child(n+3) { text-align:center; }
+  .golfer-table td { padding: 8px; border-bottom: 1px solid #f0f0eb; }
+  .golfer-table td:nth-child(n+3) { text-align: center; }
+  .golfer-table tr.counting { background: rgba(0,103,71,0.06); }
+  .golfer-table tr.counting td:first-child { border-left: 3px solid var(--masters-green); }
+  .golfer-table .golfer-name { font-weight: 500; }
+  .golfer-table .golfer-pos { color: var(--text-light); font-size: 12px; width: 35px; }
+
+  .round-score { display: inline-flex; align-items:center; justify-content:center; width:32px; height:26px; border-radius:4px; font-weight:600; font-size:13px; }
+  .round-score.under { background: #ffebee; color: var(--under-par); }
+  .round-score.over { background: #f5f5f0; color: var(--over-par); }
+  .round-score.even { background: #e8f5e9; color: var(--masters-green); }
+  .round-score.counting { outline: 2px solid var(--masters-green); outline-offset: 1px; }
+  .round-score.mc { background:#eee; color:#999; font-size:11px; }
+
+  .admin-panel {
+    display:none; background:var(--card-bg); border-radius:12px; padding:20px;
+    margin:16px 0; box-shadow:0 2px 8px rgba(0,0,0,0.08);
+  }
+  .admin-panel.show { display:block; }
+  .admin-panel h3 { font-size:16px; margin-bottom:12px; color:var(--masters-green); }
+  .admin-panel textarea { width:100%; height:300px; font-family:monospace; font-size:12px; padding:10px; border:1px solid var(--border); border-radius:8px; resize:vertical; }
+  .admin-panel .btn { background:var(--masters-green); color:white; border:none; padding:10px 20px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:600; margin-top:10px; margin-right:8px; }
+  .admin-panel .btn:hover { background:var(--masters-dark); }
+  .admin-panel .btn.secondary { background:#eee; color:var(--text); }
+  .admin-panel .btn.secondary:hover { background:#ddd; }
+  .admin-panel .help { font-size:12px; color:var(--text-light); margin-top:8px; line-height:1.5; }
+
+  .status-bar {
+    text-align:center; padding:8px; font-size:12px; color:var(--text-light);
+    border-bottom:1px solid var(--border); background:var(--card-bg);
+  }
+  .status-bar .live { color:#4caf50; font-weight:600; }
+  .status-bar .manual { color:var(--accent); font-weight:600; }
+
+  .no-scores { text-align:center; padding:40px 20px; color:var(--text-light); }
+  .no-scores h2 { font-size:18px; margin-bottom:8px; color:var(--text); }
+  .no-scores p { font-size:14px; }
+
+  .expand-icon { float:right; font-size:12px; color:var(--text-light); transition:transform 0.2s; }
+  .participant-card.expanded .expand-icon { transform:rotate(180deg); }
+
+  .cut-line { text-align:center; padding:8px; font-size:11px; color:var(--red); font-weight:600; letter-spacing:1px; text-transform:uppercase; border-bottom:2px dashed var(--red); margin:0; background:rgba(211,47,47,0.03); }
+
+  @media (max-width: 600px) {
+    .participant-row { grid-template-columns: 32px 1fr 50px 40px 40px 40px 40px; padding: 12px 10px; font-size:13px; }
+    .leaderboard-header { grid-template-columns: 32px 1fr 50px 40px 40px 40px 40px; padding: 8px 10px; font-size:10px; }
+    .golfer-table { font-size: 12px; }
+    .round-score { width:28px; height:24px; font-size:12px; }
+    header h1 { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>2026 Masters Pool</h1>
+  <div class="subtitle">Best 3 of 6 picks per round</div>
+  <div class="refresh-info">
+    <span class="refresh-dot" id="statusDot"></span>
+    <span id="statusText">Connecting...</span>
+  </div>
+  <div class="controls">
+    <button id="btnRefresh" onclick="refreshScores()">Refresh</button>
+    <button id="btnExpandAll" onclick="toggleExpandAll()">Expand All</button>
+    <button id="btnAdmin" onclick="toggleAdmin()">Admin</button>
+  </div>
+</header>
+
+<div class="container">
+  <div id="statusBar" class="status-bar"></div>
+  <div class="leaderboard-header">
+    <span>Pos</span><span>Player</span><span>Tot</span><span>R1</span><span>R2</span><span>R3</span><span>R4</span>
+  </div>
+  <div id="leaderboard"></div>
+  <div id="adminPanel" class="admin-panel">
+    <h3>Manual Score Entry</h3>
+    <p class="help">
+      Paste JSON golfer scores below. Format: <code>{"Golfer Name": {"r1": -5, "r2": -1, "r3": null, "r4": null, "thru": "F", "pos": "T1", "status": "active"}}</code><br>
+      Use <code>null</code> for rounds not yet played. Status can be "active", "cut", "wd", or "dq".<br>
+      Click "Load Scores" to apply. Scores persist in your browser.
+    </p>
+    <textarea id="scoreInput" spellcheck="false"></textarea>
+    <div>
+      <button class="btn" onclick="loadManualScores()">Load Scores</button>
+      <button class="btn secondary" onclick="exportCurrentScores()">Export Current</button>
+      <button class="btn secondary" onclick="clearManualScores()">Clear Manual</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// POOL PARTICIPANTS & PICKS
+// ============================================================
+const PARTICIPANTS = [
+  { name: "Dick", picks: ["McIlroy", "Fleetwood", "Aberg", "MacIntyre", "Day", "R. Hojgaard"] },
+  { name: "Amanda", picks: ["Scheffler", "McIlroy", "Fitzpatrick", "Aberg", "Homa", "Conners"] },
+  { name: "Cindy", picks: ["Schauffele", "SW Kim", "Fitzpatrick", "Straka", "Im", "Woodland"] },
+  { name: "Brett", picks: ["Scheffler", "Fleetwood", "Fitzpatrick", "MacIntyre", "Homa", "Burns"] },
+  { name: "Kathy", picks: ["Schauffele", "Fleetwood", "Hovland", "Bhatia", "McNealy", "Gerard"] },
+  { name: "Erin", picks: ["Scheffler", "Schauffele", "Hovland", "Bhatia", "Day", "Stevens"] },
+  { name: "Pat", picks: ["Rahm", "DeChambeau", "Aberg", "MacIntyre", "Hatton", "R. Hojgaard"] },
+  { name: "Emily R.", picks: ["Morikawa", "Koepka", "Lowry", "C. Smith", "Novak", "Campbell"] },
+  { name: "Johnny", picks: ["Schauffele", "McIlroy", "Fitzpatrick", "Aberg", "Hatton", "Burns"] },
+  { name: "Emily W.", picks: ["Scheffler", "McIlroy", "Aberg", "Matsuyama", "Im", "Conners"] },
+  { name: "Kate", picks: ["Schauffele", "Fleetwood", "Aberg", "Fitzpatrick", "Harman", "Burns"] },
+  { name: "Hannah", picks: ["DeChambeau", "Reed", "Aberg", "Fitzpatrick", "Hatton", "Conners"] },
+  { name: "Danny", picks: ["Schauffele", "Rahm", "Henley", "Matsuyama", "Hatton", "Greyserman"] },
+  { name: "Will", picks: ["Scheffler", "McIlroy", "Aberg", "Fitzpatrick", "Harman", "Penge"] },
+  { name: "Ali", picks: ["Scheffler", "Fleetwood", "Clark", "Spann", "Scott", "English"] },
+  { name: "Sarah", picks: ["Scheffler", "DeChambeau", "Aberg", "Hovland", "Echavarria", "Hall"] },
+  { name: "Justin", picks: ["Scheffler", "Rahm", "Aberg", "Matsuyama", "Scott", "Conners"] },
+];
+
+// ============================================================
+// GOLFER NAME MAPPING (shorthand → possible ESPN full names)
+// ============================================================
+const GOLFER_NAMES = {
+  "McIlroy": ["Rory McIlroy"],
+  "Fleetwood": ["Tommy Fleetwood"],
+  "Aberg": ["Ludvig Aberg", "Ludvig Åberg"],
+  "MacIntyre": ["Robert MacIntyre"],
+  "Day": ["Jason Day"],
+  "R. Hojgaard": ["Rasmus Hojgaard", "Rasmus Højgaard"],
+  "Scheffler": ["Scottie Scheffler"],
+  "Fitzpatrick": ["Matt Fitzpatrick", "Matthew Fitzpatrick"],
+  "Homa": ["Max Homa"],
+  "Conners": ["Corey Conners"],
+  "Schauffele": ["Xander Schauffele"],
+  "SW Kim": ["Si Woo Kim", "Siwoo Kim"],
+  "Straka": ["Sepp Straka"],
+  "Im": ["Sungjae Im"],
+  "Woodland": ["Gary Woodland"],
+  "Hovland": ["Viktor Hovland"],
+  "Bhatia": ["Akshay Bhatia"],
+  "McNealy": ["Maverick McNealy"],
+  "Gerard": ["Brad Gerard"],
+  "Stevens": ["Sahith Theegala", "Nate Stevens", "Stevens"],
+  "Burns": ["Sam Burns"],
+  "Rahm": ["Jon Rahm"],
+  "DeChambeau": ["Bryson DeChambeau"],
+  "Hatton": ["Tyrrell Hatton"],
+  "Morikawa": ["Collin Morikawa"],
+  "Koepka": ["Brooks Koepka"],
+  "Lowry": ["Shane Lowry"],
+  "C. Smith": ["Cameron Smith"],
+  "Novak": ["S.H. Kim", "Andrew Novak", "Novak"],
+  "Campbell": ["Patrick Cantlay", "Patrick Campbell", "Campbell"],
+  "Henley": ["Russell Henley"],
+  "Matsuyama": ["Hideki Matsuyama"],
+  "Greyserman": ["Max Greyserman"],
+  "Reed": ["Patrick Reed"],
+  "Harman": ["Brian Harman"],
+  "Penge": ["Eddie Pepperell", "Alfie Plant", "Penge"],
+  "Clark": ["Wyndham Clark"],
+  "Spann": ["J.J. Spaun", "JJ Spaun"],
+  "Scott": ["Adam Scott"],
+  "English": ["Harris English"],
+  "Echavarria": ["Nico Echavarria"],
+  "Hall": ["Harry Hall"],
+};
+
+const AUGUSTA_PAR = 72;
+
+// ============================================================
+// STATE
+// ============================================================
+let golferScores = {};   // { normalizedName: { r1, r2, r3, r4, thru, pos, status, displayName } }
+let dataSource = "none"; // "espn", "manual", "none"
+let lastUpdated = null;
+let expandedRows = new Set();
+let allExpanded = false;
+let refreshInterval = null;
+let numRoundsAvailable = 0;
+
+// ============================================================
+// ESPN API
+// ============================================================
+const ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard";
+const ESPN_LEADERBOARD = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard";
+
+function normalize(name) {
+  return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z ]/g, "").trim();
+}
+
+function findGolferScore(pickName) {
+  // Try direct match on all known aliases
+  const aliases = GOLFER_NAMES[pickName] || [pickName];
+  for (const alias of aliases) {
+    const key = normalize(alias);
+    if (golferScores[key]) return golferScores[key];
+  }
+  // Fallback: last name match
+  const lastName = pickName.replace(/^[A-Z]\.\s*/, "").replace(/^SW\s+/, "");
+  for (const [key, data] of Object.entries(golferScores)) {
+    if (key.endsWith(normalize(lastName)) || key.includes(normalize(lastName))) {
+      return data;
+    }
+  }
+  return null;
+}
+
+async function fetchESPN() {
+  try {
+    // Try scoreboard first, then leaderboard
+    let data = null;
+    for (const url of [ESPN_SCOREBOARD, ESPN_LEADERBOARD]) {
+      try {
+        const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (resp.ok) { data = await resp.json(); break; }
+      } catch(e) { continue; }
+    }
+    if (!data) throw new Error("No ESPN data");
+
+    const event = data.events?.[0];
+    if (!event) throw new Error("No active event");
+
+    const competition = event.competitions?.[0];
+    if (!competition) throw new Error("No competition data");
+
+    const competitors = competition.competitors || [];
+    if (!competitors.length) throw new Error("No competitors");
+
+    // Get par from course data if available
+    const par = event.courses?.[0]?.par || AUGUSTA_PAR;
+    let maxRounds = 0;
+
+    for (const c of competitors) {
+      const displayName = c.athlete?.displayName || "Unknown";
+      const key = normalize(displayName);
+
+      const linescores = c.linescores || [];
+      const rounds = {};
+      for (let i = 0; i < linescores.length; i++) {
+        const strokes = linescores[i].value;
+        if (strokes && strokes > 0) {
+          rounds[`r${i+1}`] = strokes - par;
+          if (i+1 > maxRounds) maxRounds = i+1;
+        }
+      }
+
+      // Parse total score
+      let totalVal = null;
+      if (c.score !== undefined) {
+        if (typeof c.score === 'object') totalVal = c.score.value;
+        else totalVal = parseInt(c.score);
+      }
+
+      // Status/thru
+      const thru = c.status?.displayValue || c.status?.thru || "";
+      const statusType = c.status?.type?.description || c.status?.type?.name || "active";
+      let status = "active";
+      if (/cut/i.test(statusType)) status = "cut";
+      else if (/withdrawn/i.test(statusType) || /wd/i.test(statusType)) status = "wd";
+      else if (/disqualified/i.test(statusType) || /dq/i.test(statusType)) status = "dq";
+
+      const position = c.status?.position?.displayName || c.sortOrder?.toString() || "";
+
+      golferScores[key] = {
+        displayName,
+        r1: rounds.r1 ?? null,
+        r2: rounds.r2 ?? null,
+        r3: rounds.r3 ?? null,
+        r4: rounds.r4 ?? null,
+        total: totalVal,
+        thru,
+        pos: position,
+        status,
+      };
+    }
+
+    numRoundsAvailable = maxRounds || 1;
+    dataSource = "espn";
+    lastUpdated = new Date();
+    return true;
+  } catch(e) {
+    console.warn("ESPN fetch failed:", e.message);
+    return false;
+  }
+}
+
+// ============================================================
+// MANUAL SCORES
+// ============================================================
+function loadManualFromStorage() {
+  try {
+    const saved = localStorage.getItem("masters_pool_scores_2026");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      applyManualScores(parsed);
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+function applyManualScores(data) {
+  let maxRound = 0;
+  for (const [name, scores] of Object.entries(data)) {
+    const key = normalize(name);
+    golferScores[key] = {
+      displayName: name,
+      r1: scores.r1 ?? null,
+      r2: scores.r2 ?? null,
+      r3: scores.r3 ?? null,
+      r4: scores.r4 ?? null,
+      total: (scores.r1||0) + (scores.r2||0) + (scores.r3||0) + (scores.r4||0),
+      thru: scores.thru || "F",
+      pos: scores.pos || "",
+      status: scores.status || "active",
+    };
+    if (scores.r4 !== null && scores.r4 !== undefined) maxRound = 4;
+    else if (scores.r3 !== null && scores.r3 !== undefined) maxRound = Math.max(maxRound, 3);
+    else if (scores.r2 !== null && scores.r2 !== undefined) maxRound = Math.max(maxRound, 2);
+    else if (scores.r1 !== null && scores.r1 !== undefined) maxRound = Math.max(maxRound, 1);
+  }
+  numRoundsAvailable = maxRound || 1;
+  dataSource = "manual";
+  lastUpdated = new Date();
+}
+
+function loadManualScores() {
+  try {
+    const input = document.getElementById("scoreInput").value;
+    const data = JSON.parse(input);
+    localStorage.setItem("masters_pool_scores_2026", input);
+    applyManualScores(data);
+    render();
+    alert("Scores loaded successfully!");
+  } catch(e) {
+    alert("Invalid JSON: " + e.message);
+  }
+}
+
+function exportCurrentScores() {
+  const output = {};
+  for (const [key, data] of Object.entries(golferScores)) {
+    output[data.displayName] = {
+      r1: data.r1, r2: data.r2, r3: data.r3, r4: data.r4,
+      thru: data.thru, pos: data.pos, status: data.status
+    };
+  }
+  document.getElementById("scoreInput").value = JSON.stringify(output, null, 2);
+}
+
+function clearManualScores() {
+  localStorage.removeItem("masters_pool_scores_2026");
+  golferScores = {};
+  dataSource = "none";
+  render();
+}
+
+// ============================================================
+// SCORING ENGINE
+// ============================================================
+function calculateLeaderboard() {
+  const results = [];
+
+  for (const p of PARTICIPANTS) {
+    let totalPoolScore = 0;
+    const roundDetails = [];
+    const golferData = [];
+
+    // Get each golfer's data
+    for (const pick of p.picks) {
+      const data = findGolferScore(pick);
+      golferData.push({
+        pickName: pick,
+        displayName: data?.displayName || GOLFER_NAMES[pick]?.[0] || pick,
+        r1: data?.r1 ?? null,
+        r2: data?.r2 ?? null,
+        r3: data?.r3 ?? null,
+        r4: data?.r4 ?? null,
+        total: data?.total ?? null,
+        thru: data?.thru || "-",
+        pos: data?.pos || "-",
+        status: data?.status || "unknown",
+      });
+    }
+
+    // For each round, find best 3
+    for (let r = 1; r <= 4; r++) {
+      const roundKey = `r${r}`;
+      const scores = golferData
+        .map((g, i) => ({ idx: i, score: g[roundKey] }))
+        .filter(s => s.score !== null && s.score !== undefined);
+
+      scores.sort((a, b) => a.score - b.score);
+      const best3 = scores.slice(0, 3);
+      const roundTotal = best3.reduce((sum, s) => sum + s.score, 0);
+      const countingIndices = new Set(best3.map(s => s.idx));
+
+      roundDetails.push({
+        round: r,
+        total: scores.length >= 3 ? roundTotal : (scores.length > 0 ? roundTotal : null),
+        countingIndices,
+        hasScores: scores.length > 0,
+      });
+
+      if (scores.length > 0) {
+        totalPoolScore += roundTotal;
+      }
+    }
+
+    results.push({
+      name: p.name,
+      totalScore: totalPoolScore,
+      roundDetails,
+      golferData,
+      hasAnyScores: golferData.some(g => g.r1 !== null),
+    });
+  }
+
+  // Sort by total score (lowest wins)
+  results.sort((a, b) => {
+    if (!a.hasAnyScores && !b.hasAnyScores) return 0;
+    if (!a.hasAnyScores) return 1;
+    if (!b.hasAnyScores) return -1;
+    return a.totalScore - b.totalScore;
+  });
+
+  // Assign positions with ties
+  let pos = 1;
+  for (let i = 0; i < results.length; i++) {
+    if (i > 0 && results[i].totalScore === results[i-1].totalScore && results[i].hasAnyScores) {
+      results[i].position = results[i-1].position;
+    } else {
+      results[i].position = results[i].hasAnyScores ? pos : "-";
+    }
+    pos = i + 2;
+  }
+
+  return results;
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function formatScore(score) {
+  if (score === null || score === undefined) return "-";
+  if (score === 0) return "E";
+  if (score > 0) return `+${score}`;
+  return `${score}`;
+}
+
+function scoreClass(score) {
+  if (score === null || score === undefined) return "";
+  if (score < 0) return "under";
+  if (score > 0) return "over";
+  return "even";
+}
+
+function render() {
+  const results = calculateLeaderboard();
+  const lb = document.getElementById("leaderboard");
+  let html = "";
+
+  if (dataSource === "none" && Object.keys(golferScores).length === 0) {
+    html = `<div class="no-scores">
+      <h2>Waiting for Scores</h2>
+      <p>Live scores will appear once the tournament begins.<br>
+      Or use the Admin panel to enter scores manually.</p>
+    </div>`;
+  } else {
+    for (const r of results) {
+      const expanded = expandedRows.has(r.name);
+      const posClass = typeof r.position === 'number' && r.position <= 3 ? 'top3' : '';
+
+      html += `<div class="participant-card ${expanded ? 'expanded' : ''}" onclick="toggleRow('${r.name}')">`;
+      html += `<div class="participant-row">`;
+      html += `<span class="pos ${posClass}">${typeof r.position === 'number' ? (r.position <= 9 ? r.position : r.position) : r.position}</span>`;
+      html += `<span class="name-cell">${r.name}<span class="daily-bests">Daily Bests: ${formatScore(r.totalScore)}</span></span>`;
+      html += `<span class="score-cell total-cell ${scoreClass(r.totalScore)}">${r.hasAnyScores ? formatScore(r.totalScore) : '-'}</span>`;
+
+      for (let i = 0; i < 4; i++) {
+        const rd = r.roundDetails[i];
+        const val = rd.hasScores ? formatScore(rd.total) : "-";
+        html += `<span class="score-cell ${rd.hasScores ? scoreClass(rd.total) : ''}">${val}</span>`;
+      }
+
+      html += `</div>`; // end participant-row
+
+      // Golfer detail table
+      html += `<div class="golfer-details">`;
+      html += `<table class="golfer-table"><thead><tr>`;
+      html += `<th>Pos</th><th>Golfer</th><th>Tot</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th>`;
+      html += `</tr></thead><tbody>`;
+
+      // Sort golfers by total score for display
+      const sortedGolfers = r.golferData.map((g, i) => ({...g, origIdx: i}));
+      sortedGolfers.sort((a, b) => {
+        if (a.total === null && b.total === null) return 0;
+        if (a.total === null) return 1;
+        if (b.total === null) return -1;
+        return a.total - b.total;
+      });
+
+      for (const g of sortedGolfers) {
+        // Check if this golfer is counting in any round
+        const isCounting = r.roundDetails.some(rd => rd.countingIndices.has(g.origIdx));
+        html += `<tr class="${isCounting ? 'counting' : ''}">`;
+        html += `<td class="golfer-pos">${g.pos || '-'}</td>`;
+        html += `<td class="golfer-name">${g.displayName}</td>`;
+
+        // Total
+        const totalDisplay = g.status === 'cut' ? 'MC' : (g.status === 'wd' ? 'WD' : formatScore(g.total));
+        html += `<td class="${scoreClass(g.total)}">${g.total !== null ? totalDisplay : '-'}</td>`;
+
+        // Round scores
+        for (let ri = 0; ri < 4; ri++) {
+          const roundKey = `r${ri+1}`;
+          const score = g[roundKey];
+          const counting = r.roundDetails[ri].countingIndices.has(g.origIdx);
+          if (score !== null && score !== undefined) {
+            html += `<td><span class="round-score ${scoreClass(score)} ${counting ? 'counting' : ''}">${formatScore(score)}</span></td>`;
+          } else if (g.status === 'cut' && ri >= 2) {
+            html += `<td><span class="round-score mc">MC</span></td>`;
+          } else {
+            html += `<td>-</td>`;
+          }
+        }
+
+        html += `</tr>`;
+      }
+
+      html += `</tbody></table></div>`; // end golfer-details
+      html += `</div>`; // end participant-card
+    }
+  }
+
+  lb.innerHTML = html;
+  updateStatus();
+}
+
+function updateStatus() {
+  const bar = document.getElementById("statusBar");
+  const dot = document.getElementById("statusDot");
+  const text = document.getElementById("statusText");
+
+  if (dataSource === "espn") {
+    dot.className = "refresh-dot";
+    const time = lastUpdated ? lastUpdated.toLocaleTimeString() : "N/A";
+    text.textContent = `Live from ESPN · Updated ${time}`;
+    bar.innerHTML = `<span class="live">● LIVE</span> — Auto-refreshing every 60s · ${Object.keys(golferScores).length} golfers tracked`;
+  } else if (dataSource === "manual") {
+    dot.className = "refresh-dot offline";
+    text.textContent = "Manual scores loaded";
+    bar.innerHTML = `<span class="manual">● MANUAL</span> — Using manually entered scores`;
+  } else {
+    dot.className = "refresh-dot offline";
+    text.textContent = "No data — use Admin to enter scores";
+    bar.innerHTML = `No score data available. Click <b>Admin</b> to enter scores manually.`;
+  }
+}
+
+// ============================================================
+// UI HANDLERS
+// ============================================================
+function toggleRow(name) {
+  if (expandedRows.has(name)) expandedRows.delete(name);
+  else expandedRows.add(name);
+  render();
+}
+
+function toggleExpandAll() {
+  allExpanded = !allExpanded;
+  if (allExpanded) {
+    PARTICIPANTS.forEach(p => expandedRows.add(p.name));
+  } else {
+    expandedRows.clear();
+  }
+  const btn = document.getElementById("btnExpandAll");
+  btn.textContent = allExpanded ? "Collapse All" : "Expand All";
+  render();
+}
+
+function toggleAdmin() {
+  const panel = document.getElementById("adminPanel");
+  const btn = document.getElementById("btnAdmin");
+  panel.classList.toggle("show");
+  btn.classList.toggle("active");
+}
+
+async function refreshScores() {
+  const btn = document.getElementById("btnRefresh");
+  btn.textContent = "Refreshing...";
+  btn.disabled = true;
+
+  const success = await fetchESPN();
+  if (!success && dataSource !== "manual") {
+    // Try loading from localStorage
+    loadManualFromStorage();
+  }
+
+  render();
+  btn.textContent = "Refresh";
+  btn.disabled = false;
+}
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+async function init() {
+  // Try ESPN first
+  const espnOk = await fetchESPN();
+
+  // If ESPN failed, try manual from localStorage
+  if (!espnOk) {
+    loadManualFromStorage();
+  }
+
+  render();
+
+  // Auto-refresh every 60 seconds if ESPN is working
+  refreshInterval = setInterval(async () => {
+    const ok = await fetchESPN();
+    if (ok) render();
+  }, 60000);
+}
+
+init();
+</script>
+</body>
+</html>
