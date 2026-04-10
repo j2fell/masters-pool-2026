@@ -320,19 +320,40 @@ async function fetchESPN() {
 
       const linescores = c.linescores || [];
       const rounds = {};
-      for (let i = 0; i < linescores.length; i++) {
-        const strokes = linescores[i].value;
-        if (strokes && strokes > 0) {
-          rounds[`r${i+1}`] = strokes - par;
-          if (i+1 > maxRounds) maxRounds = i+1;
+
+      // ESPN can return linescores as either raw strokes (e.g. 67) or relative-to-par (e.g. -5)
+      // Raw strokes are always > 50 for golf; relative scores are -20 to +20
+      // Also skip if there are more than 4 entries — that means hole-by-hole, not round-by-round
+      if (linescores.length <= 4) {
+        for (let i = 0; i < linescores.length; i++) {
+          const ls = linescores[i];
+          const val = ls.value;
+          if (val === null || val === undefined) continue;
+
+          let roundScore;
+          if (Math.abs(val) > 30) {
+            // Raw stroke count — convert to relative-to-par
+            roundScore = val - par;
+          } else {
+            // Already relative-to-par
+            roundScore = val;
+          }
+
+          rounds[`r${i+1}`] = roundScore;
+          if (i + 1 > maxRounds) maxRounds = i + 1;
         }
       }
 
-      // Parse total score
+      // Parse total score — ESPN may give it as a string like "-5" or an object
       let totalVal = null;
       if (c.score !== undefined) {
-        if (typeof c.score === 'object') totalVal = c.score.value;
-        else totalVal = parseInt(c.score);
+        const raw = typeof c.score === 'object' ? c.score.value : c.score;
+        totalVal = parseFloat(raw);
+        if (isNaN(totalVal)) totalVal = null;
+      }
+      // If we have round scores but no total, sum them
+      if (totalVal === null && Object.keys(rounds).length > 0) {
+        totalVal = Object.values(rounds).reduce((a, b) => a + b, 0);
       }
 
       // Status/thru
@@ -475,18 +496,18 @@ function calculateLeaderboard() {
         .filter(s => s.score !== null && s.score !== undefined);
 
       scores.sort((a, b) => a.score - b.score);
-      const best3 = scores.slice(0, 3);
-      const roundTotal = best3.reduce((sum, s) => sum + s.score, 0);
+      const best3 = scores.slice(0, Math.min(3, scores.length));
+      const roundTotal = best3.length > 0 ? best3.reduce((sum, s) => sum + s.score, 0) : null;
       const countingIndices = new Set(best3.map(s => s.idx));
 
       roundDetails.push({
         round: r,
-        total: scores.length >= 3 ? roundTotal : (scores.length > 0 ? roundTotal : null),
+        total: roundTotal,
         countingIndices,
         hasScores: scores.length > 0,
       });
 
-      if (scores.length > 0) {
+      if (roundTotal !== null) {
         totalPoolScore += roundTotal;
       }
     }
