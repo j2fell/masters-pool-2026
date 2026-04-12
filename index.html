@@ -412,11 +412,14 @@ async function fetchESPN() {
 
       // Status/thru
       const thru = c.status?.displayValue || c.status?.thru || "";
-      const statusType = c.status?.type?.description || c.status?.type?.name || "active";
+      const statusType = (c.status?.type?.description || c.status?.type?.name || "active").toLowerCase();
+      const statusDisplay = (c.status?.displayValue || "").toLowerCase();
       let status = "active";
-      if (/cut/i.test(statusType)) status = "cut";
-      else if (/withdrawn/i.test(statusType) || /wd/i.test(statusType)) status = "wd";
-      else if (/disqualified/i.test(statusType) || /dq/i.test(statusType)) status = "dq";
+      if (/cut|mc|missed/i.test(statusType) || /cut|mc/i.test(statusDisplay)) status = "cut";
+      else if (/withdraw|wd/i.test(statusType) || /wd/i.test(statusDisplay)) status = "wd";
+      else if (/disqualif|dq/i.test(statusType) || /dq/i.test(statusDisplay)) status = "dq";
+      // Also check: if player has R1 and R2 but no R3/R4 after round 3+ is underway, they were likely cut
+      // (This catches cases where ESPN doesn't explicitly flag the status)
 
       const position = c.status?.position?.displayName || c.sortOrder?.toString() || "";
 
@@ -434,6 +437,16 @@ async function fetchESPN() {
     }
 
     numRoundsAvailable = maxRounds || 1;
+
+    // Post-processing: if R3+ is available and a golfer has R1/R2 but no R3,
+    // they almost certainly missed the cut even if ESPN didn't flag them
+    if (numRoundsAvailable >= 3) {
+      for (const [key, g] of Object.entries(golferScores)) {
+        if (g.status === "active" && g.r1 !== null && g.r2 !== null && g.r3 === null) {
+          g.status = "cut";
+        }
+      }
+    }
     dataSource = "espn";
     lastUpdated = new Date();
     return true;
@@ -542,12 +555,19 @@ function calculateLeaderboard() {
       });
     }
 
-    // For each round, find best 3
+    // For each round, find best 3 ELIGIBLE golfers
+    // Cut/WD/DQ golfers cannot count toward best 3 in rounds they didn't play
     for (let r = 1; r <= 4; r++) {
       const roundKey = `r${r}`;
       const scores = golferData
-        .map((g, i) => ({ idx: i, score: g[roundKey] }))
-        .filter(s => s.score !== null && s.score !== undefined);
+        .map((g, i) => ({ idx: i, score: g[roundKey], status: g.status }))
+        .filter(s => {
+          // Must have an actual score
+          if (s.score === null || s.score === undefined || isNaN(s.score)) return false;
+          // Cut players only played R1 and R2 — exclude from R3 and R4
+          if (r >= 3 && (s.status === "cut" || s.status === "wd" || s.status === "dq")) return false;
+          return true;
+        });
 
       scores.sort((a, b) => a.score - b.score);
       const best3 = scores.slice(0, Math.min(3, scores.length));
