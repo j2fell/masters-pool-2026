@@ -179,6 +179,24 @@
 
 <script>
 // ============================================================
+// CUT LIST — golfers who missed the cut (override ESPN's bad data)
+// Add last names here after Friday's round. These golfers will be
+// excluded from R3/R4 scoring regardless of what ESPN reports.
+// ============================================================
+const CUT_GOLFERS = [
+  // Cut was +4. These golfers are excluded from R3/R4 scoring.
+  "DeChambeau",   // +6 — affects Pat, Hannah, Sarah
+  "MacIntyre",    // +7 — affects Dick, Brett, Pat
+  "Bhatia",       // +6 — affects Kathy, Erin
+  "Hall",         // +5 — affects Sarah
+  "Spann",        // +5 — affects Ali (J.J. Spaun)
+  "Novak",        // +7 — affects Emily R.
+  "C. Smith",     // +7 — affects Emily R.
+  "Greyserman",   // +12 — affects Danny
+  "Echavarria",   // +13 — affects Sarah
+];
+
+// ============================================================
 // POOL PARTICIPANTS & PICKS
 // ============================================================
 const PARTICIPANTS = [
@@ -541,6 +559,13 @@ function calculateLeaderboard() {
     // Get each golfer's data
     for (const pick of p.picks) {
       const data = findGolferScore(pick);
+      // Check if this golfer is in the manual CUT_GOLFERS list
+      const isManuallyCut = CUT_GOLFERS.some(name =>
+        normalize(name) === normalize(pick) ||
+        normalize(name) === normalize(data?.displayName || "")
+      );
+      const golferStatus = isManuallyCut ? "cut" : (data?.status || "unknown");
+
       golferData.push({
         pickName: pick,
         displayName: data?.displayName || GOLFER_NAMES[pick]?.[0] || pick,
@@ -551,7 +576,7 @@ function calculateLeaderboard() {
         total: data?.total ?? null,
         thru: data?.thru || "-",
         pos: data?.pos || "-",
-        status: data?.status || "unknown",
+        status: golferStatus,
       });
     }
 
